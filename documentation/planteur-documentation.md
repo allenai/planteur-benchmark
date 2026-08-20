@@ -70,9 +70,9 @@ Martinique & Mayotte; Guyane is meadow/orchard-heavy.
 
 ```python
 import sys; sys.path.append("code")
-from dataloader import PASTIS_Dataset
-ds = PASTIS_Dataset(folder="<PLANTEUR_ROOT>", sats=["S2"], folds=[1])      # train, S2
-# ds = PASTIS_Dataset(folder=..., sats=["S2", "S1"], folds=[5])            # test, S2+S1
-# ds = PASTIS_Dataset(folder=..., target="instance", folds=[5])           # panoptic
+from dataloader import PLANTEUR_Dataset
+ds = PLANTEUR_Dataset(folder="<PLANTEUR_ROOT>", sats=["S2"], folds=[1])      # train, S2
+# ds = PLANTEUR_Dataset(folder=..., sats=["S2", "S1"], folds=[5])            # test, S2+S1
+# ds = PLANTEUR_Dataset(folder=..., target="instance", folds=[5])           # panoptic
 (data, dates), target = ds[0]
 ```

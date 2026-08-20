@@ -50,9 +50,9 @@ for semantic and panoptic segmentation (identical API to PASTIS). `code/collate.
 
 ```python
 import sys; sys.path.append("code")
-from dataloader import PASTIS_Dataset
-train = PASTIS_Dataset(folder="<PLANTEUR_ROOT>", sats=["S2"], folds=[1])
-test  = PASTIS_Dataset(folder="<PLANTEUR_ROOT>", sats=["S2", "S1"], target="instance", folds=[5])
+from dataloader import PLANTEUR_Dataset
+train = PLANTEUR_Dataset(folder="<PLANTEUR_ROOT>", sats=["S2"], folds=[1])
+test  = PLANTEUR_Dataset(folder="<PLANTEUR_ROOT>", sats=["S2", "S1"], target="instance", folds=[5])
 ```
 
 - **Metrics**

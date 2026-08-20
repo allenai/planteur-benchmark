@@ -14,7 +14,7 @@ import torch
 import torch.utils.data as tdata
 
 
-class PASTIS_Dataset(tdata.Dataset):
+class PLANTEUR_Dataset(tdata.Dataset):
     def __init__(
         self,
         folder,
@@ -80,7 +80,7 @@ class PASTIS_Dataset(tdata.Dataset):
                 or sats=['S2', 'S1A','S1D'] to retrieve all time series.
                 If you are using PASTIS, only  S2 observations are available.
         """
-        super(PASTIS_Dataset, self).__init__()
+        super(PLANTEUR_Dataset, self).__init__()
         self.folder = folder
         self.norm = norm
         self.reference_date = datetime(*map(int, reference_date.split("-")))
@@ -317,3 +317,7 @@ def prepare_dates(date_dict, reference_date):
     )
     return d.values
 
+
+
+# Backward-compatible alias (the dataset follows the PASTIS format).
+PASTIS_Dataset = PLANTEUR_Dataset

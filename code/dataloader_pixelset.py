@@ -17,7 +17,7 @@ from scipy.interpolate import interp1d
 from torch.nn import functional as F
 
 
-class PASTIS_Dataset_PixelSet(data.Dataset):
+class PLANTEUR_Dataset_PixelSet(data.Dataset):
     def __init__(
             self,
             folder,
@@ -92,7 +92,7 @@ class PASTIS_Dataset_PixelSet(data.Dataset):
             sats
         ), "Unknown satellite name (available: S2/S1A/S1D)"
 
-        super(PASTIS_Dataset_PixelSet, self).__init__()
+        super(PLANTEUR_Dataset_PixelSet, self).__init__()
         self.folder = folder
         self.sats = sats
         self.norm = norm
@@ -340,3 +340,7 @@ def prepare_dates(date_dict, reference_date):
     )
     return d.values
 
+
+
+# Backward-compatible alias.
+PASTIS_Dataset_PixelSet = PLANTEUR_Dataset_PixelSet
