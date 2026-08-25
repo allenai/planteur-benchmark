@@ -1,0 +1,43 @@
+{
+ "_doc": "PLANTEUR bg8void taxonomy. Maps the 26-class source label id to the 8 trained classes; every excluded crop -> 255 (void), masked out of loss and metrics. Background(0) stays a real trained class. Verified: the kept-only variant of this map reproduces the legacy bg8 ANNOTATIONS for all 2750 patches (0 mismatches); void covers 92,145 px (0.20% of pixels, 0.25% of Background).",
+ "num_classes": 8,
+ "nodata_value": 255,
+ "class_names": [
+  "Background",
+  "Meadow",
+  "Fruits, vegetables, flowers",
+  "Orchard",
+  "Sugarcane",
+  "Banana",
+  "Pineapple",
+  "Tropical tuber"
+ ],
+ "class_id_mapping": {
+  "0": 0,
+  "1": 1,
+  "12": 2,
+  "16": 3,
+  "19": 4,
+  "20": 5,
+  "21": 6,
+  "23": 7,
+  "2": 255,
+  "3": 255,
+  "4": 255,
+  "5": 255,
+  "6": 255,
+  "7": 255,
+  "8": 255,
+  "9": 255,
+  "10": 255,
+  "11": 255,
+  "13": 255,
+  "14": 255,
+  "15": 255,
+  "17": 255,
+  "18": 255,
+  "22": 255,
+  "24": 255,
+  "25": 255
+ }
+}

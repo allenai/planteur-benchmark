@@ -12,19 +12,20 @@ PASTIS-R dataloaders, collate functions and panoptic metrics work unchanged.
 
 | Path | Shape / dtype | Description |
 |---|---|---|
-| `DATA_S2/S2_<id>.npy` | `(T_s2, 10, 128, 128)` uint16 | Sentinel-2 L2A time series. Bands B02,B03,B04,B05,B06,B07,B08,B8A,B11,B12. Variable T (~80–92 unique dates). |
-| `DATA_S1/S1_<id>.npy` | `(T_s1, 2, 128, 128)` float32 | Sentinel-1 (VV, VH) time series, raw backscatter (not dB). Variable T (~120–150). |
-| `ANNOTATIONS/TARGET_<id>.npy` | `(1, 128, 128)` | Semantic labels, 8 classes (below). |
+| `DATA_S2/S2_<id>.npy` | `(T_s2, 10, 128, 128)` uint16 | Sentinel-2 L2A time series. Bands B02,B03,B04,B05,B06,B07,B08,B8A,B11,B12. Variable T (40–150 unique dates, median 87). |
+| `DATA_S1/S1_<id>.npy` | `(T_s1, 2, 128, 128)` float32 | Sentinel-1 (VV, VH) time series, raw backscatter (not dB). Variable T (40–150, median 123). |
+| `ANNOTATIONS_BG8VOID/TARGET_<id>.npy` | `(1, 128, 128)` uint8 | **Canonical** semantic labels: 8 classes + 255 void (below). |
+| `ANNOTATIONS/TARGET_<id>.npy` | `(1, 128, 128)` uint8 | Legacy `bg8` labels (excluded crops folded into Background). Deprecated; retained for reproducibility. |
 | `INSTANCE_ANNOTATIONS/INSTANCES_<id>.npy` | `(128, 128)` int32 | Per-pixel parcel/instance id (0 = background). IDs are globally unique. |
 | `INSTANCE_ANNOTATIONS/HEATMAP_<id>.npy` | `(128, 128)` float32 | Object-centerness heatmap (PaPs convention). |
 | `INSTANCE_ANNOTATIONS/ZONES_<id>.npy` | `(128, 128)` int32 | Pixel → nearest-center instance (Voronoi zones). |
-| `metadata.geojson` | 2,750 rows | Per-patch `ID_PATCH`, `dates-S2`, `dates-S1` (`{step: YYYYMMDD}`), `Fold`, `geometry` (real patch polygon, EPSG:4326). |
+| `metadata.geojson` | 2,750 rows | Per-patch `ID_PATCH`, `dates-S2`, `dates-S1` (`{step: YYYYMMDD}`), `Fold`, `Island`, `geometry` (real patch polygon, EPSG:4326). |
 | `NORM_S2_patch.json`, `NORM_S1_patch.json` | — | Per-band train mean/std, keyed `Fold_1`..`Fold_5`. |
 
 Same-day acquisitions are mosaicked to a single observation, so `dates-*` are unique
 and chronological and their length matches the array T (PASTIS's one-observation-per-date rule).
 
-## 2. Classes (8)
+## 2. Classes (8 + void)
 
 | id | class | id | class |
 |--:|---|--:|---|
@@ -33,8 +34,16 @@ and chronological and their length matches the array T (PASTIS's one-observation
 | 2 | Fruits, vegetables, flowers | 6 | Pineapple |
 | 3 | Orchard | 7 | Tropical tuber |
 
-Background (0) is non-agricultural land plus agricultural parcels whose crop type is
-outside this taxonomy. Colors for visualization are in `colormap.txt` (index-aligned to
+Void is **255**. Agricultural parcels whose crop type is outside this taxonomy (Corn,
+Grapevine, Beet, Potatoes, Leguminous fodder, Soybeans, Vanilla, Ylang-ylang,
+Coffee/Cacao, plus temperate classes absent from the DROM) are mapped to void and must
+be excluded from loss and metrics — **not** folded into Background. Background (0) is
+therefore genuine non-agricultural land only, and remains a real trained class. Void
+covers 92,145 px (0.20% of pixels; 0.25% of the Background class) across 966 of the
+60,576 parcels. The full 26-class → bg8void mapping is in `bg8void_class_map.json`.
+
+The legacy `bg8` taxonomy in `ANNOTATIONS/` instead folded those ids into Background (0);
+metrics under the two taxonomies are not comparable. Colors for visualization are in `colormap.txt` (index-aligned to
 the class ids, with a trailing white entry for nodata/void).
 
 ## 3. Splits
@@ -49,10 +58,29 @@ Spatial-block, territory-stratified 5-fold-style split written in `metadata.geoj
 
 Whole ~11 km spatial blocks are assigned to a single split (no spatial leakage), and each
 territory (hence every crop class) is represented across train/val/test.
+### Leave-one-island-out (LOIO)
+
+`splits/loio.json` holds five additional configurations. For each held-out territory,
+`test` is all of its patches; `train`/`val` come from the same spatial-block,
+territory-stratified 70/15/15 assignment over the remaining territories.
+
+| held-out (test) | test | val | train |
+|---|--:|--:|--:|
+| Guadeloupe | 735 | 265 | 1,750 |
+| Martinique | 550 | 250 | 1,950 |
+| Guyane | 506 | 284 | 1,960 |
+| Réunion | 813 | 217 | 1,720 |
+| Mayotte | 140 | 314 | 2,296 |
+
+Per-patch territory is in `metadata.geojson.Island`. Saint-Martin (6 patches) is
+labelled but never held out — it stays in `train` for every fold.
+
 
 ## 4. Per-territory composition
 
 Patch counts: Réunion 813 · Guadeloupe 741 · Martinique 550 · Guyane 506 · Mayotte 140.
+The Guadeloupe figure includes 6 patches from Saint-Martin (a COM, not a DROM), which
+`metadata.geojson.Island` labels separately as `Saint-Martin`.
 Total unique parcels: **60,576**. Per-class distributions (pixels / windows / parcels) per
 island are shown in `../images/{pixels,windows,parcels}_per_class_per_island.png`.
 Island crop signatures: sugarcane dominates Réunion & Guadeloupe; banana dominates

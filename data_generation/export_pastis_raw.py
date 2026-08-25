@@ -5,7 +5,7 @@ so existing PASTIS dataloaders (pastis-benchmark/code/dataloader.py) load it as-
 Produces, under --out:
   DATA_S2/S2_<id>.npy          (T_s2, 10, 128, 128) uint16, chronological
   DATA_S1/S1_<id>.npy          (T_s1, 2, 128, 128) float32 (vv,vh dB), chronological
-  ANNOTATIONS/TARGET_<id>.npy  (1, 128, 128) uint8  -- bg8 8-class semantic labels
+  ANNOTATIONS/TARGET_<id>.npy  (1, 128, 128) uint8  -- 8 classes + 255 void (bg8void)
   metadata.geojson             ID_PATCH, dates-S2, dates-S1, Fold, geometry(real polygon)
   NORM_S2_patch.json, NORM_S1_patch.json
 
@@ -27,8 +27,19 @@ import pyproj
 
 S2_BS = "B02_B03_B04_B05_B06_B07_B08_B8A_B11_B12"   # 10 bands, 128x128
 S1_BS = "vv_vh"
-# 26-class label id -> bg8 (kept 8 -> 0-7; everything else -> 0 Background). 255 nodata.
+# 26-class source label id -> the 8 trained classes.
+#
+# Canonical taxonomy is "bg8void": every excluded crop (Corn, Grapevine, Beet,
+# Potatoes, Leguminous fodder, Soybeans, Vanilla, Ylang-ylang, Coffee/Cacao, plus the
+# temperate classes absent from the DROM) maps to VOID, which is masked out of loss
+# and metrics. Background(0) therefore stays a real land-cover class instead of
+# absorbing unmapped agriculture -- following the PASTIS convention that background is
+# land cover and void is invalid data.
+#
+# The legacy "bg8" taxonomy folded those ids into Background(0). It is retained only to
+# reproduce the deprecated ANNOTATIONS/ set; new work should use bg8void.
 BG8 = {0: 0, 1: 1, 12: 2, 16: 3, 19: 4, 20: 5, 21: 6, 23: 7}
+VOID = 255  # void / nodata sentinel (also the source raster's nodata value)
 FOLD_OF = {"train": 1, "val": 4, "test": 5}
 
 
@@ -90,14 +101,18 @@ def build_series(window: str, layer: str, bs: str):
     return np.stack(frames, 0), days
 
 
-def read_target(window: str) -> np.ndarray:
+def read_target(window: str, taxonomy: str = "bg8void") -> np.ndarray:
+    """Semantic target for one window. taxonomy: "bg8void" (canonical) or "bg8"."""
     tif = glob.glob(os.path.join(window, "layers/label/*/geotiff.tif"))[0]
     with rasterio.open(tif) as ds:
         lab = ds.read(1)
-    out = np.zeros_like(lab, dtype=np.uint8)
+    # Anything not explicitly kept by BG8 becomes VOID under bg8void, or Background(0)
+    # under legacy bg8. BG8 maps source id 0 -> 0, so true background survives either way.
+    fill = VOID if taxonomy == "bg8void" else 0
+    out = np.full(lab.shape, fill, dtype=np.uint8)
     for k, v in BG8.items():
         out[lab == k] = v
-    out[lab == 255] = 255
+    out[lab == VOID] = VOID
     return out[None]  # (1, H, W)
 
 
@@ -149,6 +164,13 @@ def main():
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--end", type=int, default=0)   # 0 == to end
     ap.add_argument("--merge", action="store_true")
+    ap.add_argument(
+        "--taxonomy",
+        choices=["bg8void", "bg8"],
+        default="bg8void",
+        help="bg8void (canonical): excluded crops -> 255 void. "
+        "bg8 (legacy): excluded crops -> 0 Background.",
+    )
     args = ap.parse_args()
     for sub in ["DATA_S2", "DATA_S1", "ANNOTATIONS", "_meta", "_norm"]:
         os.makedirs(os.path.join(args.out, sub), exist_ok=True)
@@ -177,7 +199,10 @@ def main():
             # convert to dB like PASTIS-R (10*log10), keep float32
             s1f = s1.astype(np.float32)
             np.save(os.path.join(args.out, "DATA_S1", f"S1_{pid}.npy"), s1f)
-        np.save(os.path.join(args.out, "ANNOTATIONS", f"TARGET_{pid}.npy"), read_target(w))
+        np.save(
+            os.path.join(args.out, "ANNOTATIONS", f"TARGET_{pid}.npy"),
+            read_target(w, args.taxonomy),
+        )
         # norm accumulation (train only; merged across shards later)
         if split == "train":
             x = s2.astype(np.float64).transpose(1, 0, 2, 3).reshape(s2.shape[1], -1)

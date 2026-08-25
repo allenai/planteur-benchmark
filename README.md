@@ -24,9 +24,9 @@ tuber, …). We provide an official spatial-block, territory-stratified train/va
 
 | | | |
 |---|---|---|
-| ▶️ 2,750 time series | ▶️ 60,576 parcels | ▶️ 8 crop classes |
-| ▶️ **128×128 px / image** | ▶️ **~80–92 S2 acquisitions / series** | ▶️ **10 m / pixel** |
-| ▶️ **10 S2 + 2 S1 bands** | ▶️ **5 overseas territories** | ▶️ **Sept 2018 – Dec 2019** |
+| ▶️ 2,750 time series | ▶️ 60,576 parcels | ▶️ 8 classes + void |
+| ▶️ **128×128 px / image** | ▶️ **40–150 S2 acquisitions / series** | ▶️ **10 m / pixel** |
+| ▶️ **10 S2 + 2 S1 bands** | ▶️ **6 territories (5 DROM + Saint-Martin)** | ▶️ **Sept 2018 – Dec 2019** |
 
 - 🛰️ **Multimodal (optical + radar).** Every patch has aligned Sentinel-1 (VV/VH)
   observations in addition to Sentinel-2, for optical–radar fusion experiments.
@@ -37,7 +37,7 @@ tuber, …). We provide an official spatial-block, territory-stratified train/va
 
 The dataset (~115 GB) will be hosted on the Hugging Face Hub:
 
-> **https://huggingface.co/datasets/allenai/planteur-benchmark**  ⚠️ *(upload pending)*
+> **https://huggingface.co/datasets/allenai/planteur-benchmark**
 
 Internal (pre-release) location on Weka: `/weka/dfive-default/piperw/pastis2_drom_pastis_format`.
 
@@ -57,8 +57,11 @@ test  = PLANTEUR_Dataset(folder="<PLANTEUR_ROOT>", sats=["S2", "S1"], target="in
 
 - **Metrics**
 
-`code/panoptic_metrics.py` provides the PyTorch panoptic metrics (SQ/RQ/PQ). For semantic
-segmentation, report mean IoU over the 8 classes.
+`code/panoptic_metrics.py` provides the PyTorch panoptic metrics (SQ/RQ/PQ). Void (255)
+must be excluded from both loss and metrics: for semantic segmentation report mean IoU
+over the 8 classes with void ignored, and for panoptic use
+`PanopticMeter(num_classes=8, void_label=255, background_label=0)`, which scores PQ over
+the 7 crop classes (background and void both excluded).
 
 - **Visualization**
 
@@ -67,17 +70,37 @@ See `demo.ipynb` for loading and visualizing samples. Per-island class distribut
 
 ## Splits
 
+### Default (spatial-block, territory-stratified)
+
 | Fold | role | patches |
 |--:|---|--:|
 | 1 | train | 1,896 |
 | 4 | val | 411 |
 | 5 | test | 443 |
 
+### Leave-one-island-out (LOIO)
+
+`splits/loio.json` holds five additional configurations. For each held-out territory,
+`test` is all of its patches; `train`/`val` come from the same spatial-block,
+territory-stratified 70/15/15 assignment over the remaining territories.
+
+| held-out (test) | test | val | train |
+|---|--:|--:|--:|
+| Guadeloupe | 735 | 265 | 1,750 |
+| Martinique | 550 | 250 | 1,950 |
+| Guyane | 506 | 284 | 1,960 |
+| Réunion | 813 | 217 | 1,720 |
+| Mayotte | 140 | 314 | 2,296 |
+
+Per-patch territory is in `metadata.geojson.Island`. Saint-Martin (6 patches) is
+labelled but never held out — it stays in `train` for every fold.
+
 ## Documentation
 
 The 8-class nomenclature and full format specification (arrays, shapes, metadata, provenance)
 are in [`documentation/planteur-documentation.md`](documentation/planteur-documentation.md).
-Class names: `documentation/label_names.json`; visualization colors: `documentation/colormap.txt`.
+Class names: `documentation/label_names.json`; the full 26-class → bg8void mapping:
+`documentation/bg8void_class_map.json`; visualization colors: `documentation/colormap.txt`.
 
 ![pixels per class per island](images/pixels_per_class_per_island.png)
 
