@@ -99,8 +99,8 @@ labelled but never held out — it stays in `train` for every fold.
 
 The 8-class nomenclature and full format specification (arrays, shapes, metadata, provenance)
 are in [`documentation/planteur-documentation.md`](documentation/planteur-documentation.md).
-Class names: `documentation/label_names.json`; the full 26-class → bg8void mapping:
-`documentation/bg8void_class_map.json`; visualization colors: `documentation/colormap.txt`.
+Class names: `documentation/label_names.json`; the full 26-class → class-id mapping:
+`documentation/class_map.json`; visualization colors: `documentation/colormap.txt`.
 
 ![pixels per class per island](images/pixels_per_class_per_island.png)
 

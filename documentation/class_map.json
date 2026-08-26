@@ -1,5 +1,5 @@
 {
- "_doc": "PLANTEUR bg8void taxonomy. Maps the 26-class source label id to the 8 trained classes; every excluded crop -> 255 (void), masked out of loss and metrics. Background(0) stays a real trained class. Verified: the kept-only variant of this map reproduces the legacy bg8 ANNOTATIONS for all 2750 patches (0 mismatches); void covers 92,145 px (0.20% of pixels, 0.25% of Background).",
+ "_doc": "PLANTEUR class map. Maps the 26-class source label id to the 8 trained classes; every excluded crop -> 255 (void), masked out of loss and metrics. Background(0) is genuine non-agricultural land and stays a real trained class. Void covers 92,145 px (0.20% of pixels) across 966 of the 60,576 parcels.",
  "num_classes": 8,
  "nodata_value": 255,
  "class_names": [

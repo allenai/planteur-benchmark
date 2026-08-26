@@ -14,8 +14,7 @@ PASTIS-R dataloaders, collate functions and panoptic metrics work unchanged.
 |---|---|---|
 | `DATA_S2/S2_<id>.npy` | `(T_s2, 10, 128, 128)` uint16 | Sentinel-2 L2A time series. Bands B02,B03,B04,B05,B06,B07,B08,B8A,B11,B12. Variable T (40–150 unique dates, median 87). |
 | `DATA_S1/S1_<id>.npy` | `(T_s1, 2, 128, 128)` float32 | Sentinel-1 (VV, VH) time series, raw backscatter (not dB). Variable T (40–150, median 123). |
-| `ANNOTATIONS_BG8VOID/TARGET_<id>.npy` | `(1, 128, 128)` uint8 | **Canonical** semantic labels: 8 classes + 255 void (below). |
-| `ANNOTATIONS/TARGET_<id>.npy` | `(1, 128, 128)` uint8 | Legacy `bg8` labels (excluded crops folded into Background). Deprecated; retained for reproducibility. |
+| `ANNOTATIONS/TARGET_<id>.npy` | `(1, 128, 128)` uint8 | Semantic labels: 8 classes + 255 void (below). |
 | `INSTANCE_ANNOTATIONS/INSTANCES_<id>.npy` | `(128, 128)` int32 | Per-pixel parcel/instance id (0 = background). IDs are globally unique. |
 | `INSTANCE_ANNOTATIONS/HEATMAP_<id>.npy` | `(128, 128)` float32 | Object-centerness heatmap (PaPs convention). |
 | `INSTANCE_ANNOTATIONS/ZONES_<id>.npy` | `(128, 128)` int32 | Pixel → nearest-center instance (Voronoi zones). |
@@ -40,10 +39,9 @@ Coffee/Cacao, plus temperate classes absent from the DROM) are mapped to void an
 be excluded from loss and metrics — **not** folded into Background. Background (0) is
 therefore genuine non-agricultural land only, and remains a real trained class. Void
 covers 92,145 px (0.20% of pixels; 0.25% of the Background class) across 966 of the
-60,576 parcels. The full 26-class → bg8void mapping is in `bg8void_class_map.json`.
+60,576 parcels. The full 26-class → class-id mapping is in `class_map.json`.
 
-The legacy `bg8` taxonomy in `ANNOTATIONS/` instead folded those ids into Background (0);
-metrics under the two taxonomies are not comparable. Colors for visualization are in `colormap.txt` (index-aligned to
+Colors for visualization are in `colormap.txt` (index-aligned to
 the class ids, with a trailing white entry for nodata/void).
 
 ## 3. Splits
