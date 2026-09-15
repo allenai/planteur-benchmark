@@ -41,6 +41,13 @@ therefore genuine non-agricultural land only, and remains a real trained class. 
 covers 92,145 px (0.20% of pixels; 0.25% of the Background class) across 966 of the
 60,576 parcels. The full 26-class → class-id mapping is in `class_map.json`.
 
+**Representing void in a trainer.** Void is `255` on disk, which metric code handles
+directly. A trainer that allocates one output channel per class cannot represent 255 —
+e.g. UTAE-PaPs `train_panoptic.py`, whose `--out_conv "[32, N]"` sizes the head by
+`num_classes`. For those, remap `255 -> 8` and use `num_classes 9`, `void_label 8`. The
+eight trained class ids are unchanged either way.
+
+
 Colors for visualization are in `colormap.txt` (index-aligned to
 the class ids, with a trailing white entry for nodata/void).
 

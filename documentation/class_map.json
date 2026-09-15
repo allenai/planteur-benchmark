@@ -39,5 +39,6 @@
   "22": 255,
   "24": 255,
   "25": 255
- }
+ },
+ "void_in_trainer": "Void is 255 on disk. Metric code handles 255 directly. A trainer that allocates one output channel per class cannot represent it (e.g. UTAE-PaPs train_panoptic.py, whose --out_conv sizes the head by num_classes): remap 255 -> 8 and use num_classes 9, void_label 8. The eight trained class ids are unchanged."
 }

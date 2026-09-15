@@ -63,6 +63,13 @@ over the 8 classes with void ignored, and for panoptic use
 `PanopticMeter(num_classes=8, void_label=255, background_label=0)`, which scores PQ over
 the 7 crop classes (background and void both excluded).
 
+**Representing void in a trainer.** Void is `255` on disk, which metric code handles
+directly. A trainer that allocates one output channel per class cannot represent 255 —
+e.g. UTAE-PaPs `train_panoptic.py`, whose `--out_conv "[32, N]"` sizes the head by
+`num_classes`. For those, remap `255 -> 8` and use `num_classes 9`, `void_label 8`. The
+eight trained class ids are unchanged either way.
+
+
 - **Visualization**
 
 See `demo.ipynb` for loading and visualizing samples. Per-island class distributions are in
