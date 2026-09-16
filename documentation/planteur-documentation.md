@@ -14,15 +14,24 @@ PASTIS-R dataloaders, collate functions and panoptic metrics work unchanged.
 |---|---|---|
 | `DATA_S2/S2_<id>.npy` | `(T_s2, 10, 128, 128)` uint16 | Sentinel-2 L2A time series. Bands B02,B03,B04,B05,B06,B07,B08,B8A,B11,B12. Variable T (40–150 unique dates, median 87). |
 | `DATA_S1/S1_<id>.npy` | `(T_s1, 2, 128, 128)` float32 | Sentinel-1 (VV, VH) time series, raw backscatter (not dB). Variable T (40–150, median 123). |
+| `DATA_LS/LS_<id>.npy` | `(T_ls, 10, 64, 64)` uint16 | Landsat-8 OLI/TIRS time series. Bands B1,B2,B3,B4,B5,B6,B7,B9,B10,B11. **Native 30 m grid, not resampled** &mdash; 64&times;64 covers the same patch footprint as the 128&times;128 S2/S1 arrays. Variable T (28&ndash;92 unique dates, median 30). |
+| `DATA_LS_PAN/LSPAN_<id>.npy` | `(T_ls, 1, 128, 128)` uint16 | Landsat-8 panchromatic B8 at its native 15 m grid, so it is a separate array from the multispectral bands. Same T and same dates as `DATA_LS`. |
 | `ANNOTATIONS/TARGET_<id>.npy` | `(1, 128, 128)` uint8 | Semantic labels: 8 classes + 255 void (below). |
 | `INSTANCE_ANNOTATIONS/INSTANCES_<id>.npy` | `(128, 128)` int32 | Per-pixel parcel/instance id (0 = background). IDs are globally unique. |
 | `INSTANCE_ANNOTATIONS/HEATMAP_<id>.npy` | `(128, 128)` float32 | Object-centerness heatmap (PaPs convention). |
 | `INSTANCE_ANNOTATIONS/ZONES_<id>.npy` | `(128, 128)` int32 | Pixel → nearest-center instance (Voronoi zones). |
-| `metadata.geojson` | 2,750 rows | Per-patch `ID_PATCH`, `dates-S2`, `dates-S1` (`{step: YYYYMMDD}`), `Fold`, `Island`, `geometry` (real patch polygon, EPSG:4326). |
+| `metadata.geojson` | 2,750 rows | Per-patch `ID_PATCH`, `dates-S2`, `dates-S1`, `dates-LS` (`{step: YYYYMMDD}`), `Fold`, `Island`, `geometry` (real patch polygon, EPSG:4326). |
 | `NORM_S2_patch.json`, `NORM_S1_patch.json` | — | Per-band train mean/std, keyed `Fold_1`..`Fold_5`. |
 
 Same-day acquisitions are mosaicked to a single observation, so `dates-*` are unique
 and chronological and their length matches the array T (PASTIS's one-observation-per-date rule).
+
+Landsat is published on its native grids rather than resampled onto the S2 grid: the
+multispectral bands stay 64&times;64 and the panchromatic band 128&times;128, so no pixels are
+invented. `DATA_LS` and `DATA_LS_PAN` share one date list per patch (`dates-LS`), and a
+patch's Landsat count is independent of its S2/S1 counts &mdash; patches in a WRS-2 sidelap
+see two or three times as many Landsat passes (the T distribution is ~1&times;/2&times;/3&times; clustered
+at roughly 30/62/91).
 
 ## 2. Classes (8 + void)
 
