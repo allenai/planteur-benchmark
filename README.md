@@ -26,7 +26,7 @@ tuber, …). We provide an official spatial-block, territory-stratified train/va
 |---|---|---|
 | ▶️ 2,750 time series | ▶️ 60,576 parcels | ▶️ 8 classes + void |
 | ▶️ **128×128 px / image** | ▶️ **40–150 S2 acquisitions / series** | ▶️ **10 m / pixel** |
-| ▶️ **10 S2 + 2 S1 bands** | ▶️ **6 territories (5 DROM + Saint-Martin)** | ▶️ **Sept 2018 – Dec 2019** |
+| ▶️ **10 S2 + 2 S1 + 11 Landsat bands** | ▶️ **6 territories (5 DROM + Saint-Martin)** | ▶️ **Sept 2018 – Dec 2019** |
 
 - 🛰️ **Multimodal (optical + radar).** Every patch has aligned Sentinel-1 (VV/VH)
   observations in addition to Sentinel-2, for optical–radar fusion experiments.
@@ -35,9 +35,12 @@ tuber, …). We provide an official spatial-block, territory-stratified train/va
 
 - **Download**
 
-The dataset (~115 GB) will be hosted on the Hugging Face Hub:
+The dataset (~133 GB) is hosted on the Hugging Face Hub:
 
 > **https://huggingface.co/datasets/allenai/planteur-benchmark**
+
+A 25-patch preview (`sample/sample.parquet`) renders in the Hugging Face dataset viewer, so
+the imagery, labels and per-patch metadata can be browsed without downloading the arrays.
 
 Internal (pre-release) location on Weka: `/weka/dfive-default/piperw/pastis2_drom_pastis_format`.
 
@@ -53,6 +56,22 @@ import sys; sys.path.append("code")
 from dataloader import PLANTEUR_Dataset
 train = PLANTEUR_Dataset(folder="<PLANTEUR_ROOT>", sats=["S2"], folds=[1])
 test  = PLANTEUR_Dataset(folder="<PLANTEUR_ROOT>", sats=["S2", "S1"], target="instance", folds=[5])
+```
+
+- **Georeferencing**
+
+`ANNOTATIONS_GEOTIFF/TARGET_<id>.tif` holds the semantic labels as GeoTIFFs carrying each
+patch's CRS and affine transform (uint8, 128×128, `nodata=255`), with pixel values identical
+to `ANNOTATIONS/TARGET_<id>.npy`. The imagery arrays share the same grid, so a patch's label
+GeoTIFF also georeferences its `DATA_*` arrays. Patches span five UTM zones (EPSG:32620,
+32621, 32622, 32738, 32740), so there is no single CRS for the dataset; per-patch footprints
+are also in `metadata.geojson.geometry` (EPSG:4326).
+
+```python
+import rasterio
+with rasterio.open("ANNOTATIONS_GEOTIFF/TARGET_0.tif") as src:
+    labels = src.read(1)          # (128,128) uint8, 255 = void
+    crs, transform = src.crs, src.transform
 ```
 
 - **Metrics**
