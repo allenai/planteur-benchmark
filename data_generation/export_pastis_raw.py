@@ -4,7 +4,7 @@ so existing PASTIS dataloaders (pastis-benchmark/code/dataloader.py) load it as-
 
 Produces, under --out:
   DATA_S2/S2_<id>.npy          (T_s2, 10, 128, 128) uint16, chronological
-  DATA_S1/S1_<id>.npy          (T_s1, 2, 128, 128) float32 (vv,vh dB), chronological
+  DATA_S1/S1_<id>.npy          (T_s1, 2, 128, 128) float32 (vv,vh linear), chronological
   ANNOTATIONS/TARGET_<id>.npy  (1, 128, 128) uint8  -- 8 classes + 255 void
   metadata.geojson             ID_PATCH, dates-S2, dates-S1, Fold, geometry(real polygon)
   NORM_S2_patch.json, NORM_S1_patch.json
@@ -27,6 +27,8 @@ import pyproj
 
 S2_BS = "B02_B03_B04_B05_B06_B07_B08_B8A_B11_B12"   # 10 bands, 128x128
 S1_BS = "vv_vh"
+# Source-raster nodata per layer. Output nodata is 0 for both (see build_series).
+SRC_NODATA = {"sentinel2": 0, "sentinel1": -32768}
 # 26-class source label id -> the 8 trained classes. Every excluded crop (Corn,
 # Grapevine, Beet, Potatoes, Leguminous fodder, Soybeans, Vanilla, Ylang-ylang,
 # Coffee/Cacao, plus the temperate classes absent from the DROM) maps to VOID, which is
@@ -70,8 +72,11 @@ def build_series(window: str, layer: str, bs: str):
     """Return (T,C,128,128) array (chronological, ONE obs per date) + yyyymmdd list.
 
     Same-date acquisitions (multiple overlapping tiles/orbits) are mosaicked into a
-    single observation -- per band+pixel mean over the non-nodata (nonzero) frames --
-    matching PASTIS's one-observation-per-date convention.
+    single observation -- per band+pixel mean over the valid frames -- matching
+    PASTIS's one-observation-per-date convention. A frame is invalid where it holds
+    the layer's source nodata (S2: 0, S1: -32768) or a non-finite value. Pixels with no
+    valid frame on a date are written as 0 (the output nodata for both S2 and S1), and
+    dates with no valid pixel at all are dropped.
     """
     by_date: dict[int, list] = {}
     for gi, day in _acq_dates(window, layer):
@@ -81,18 +86,21 @@ def build_series(window: str, layer: str, bs: str):
         by_date.setdefault(day, []).append(arr)
     if not by_date:
         return None, []
+    nodata = SRC_NODATA[layer]
     frames, days = [], []
     for day in sorted(by_date):
         fs = by_date[day]
-        if len(fs) == 1:
-            m = fs[0]
-        else:
-            st = np.stack(fs).astype(np.float32)
-            valid = st != 0
-            m = (st * valid).sum(0) / np.maximum(valid.sum(0), 1)
-            m = m.astype(fs[0].dtype)
-        frames.append(m)
+        st = np.stack(fs).astype(np.float32)
+        valid = np.isfinite(st) & (st != nodata)
+        if not valid.any():
+            continue
+        n = valid.sum(0)
+        m = np.where(valid, st, 0).sum(0) / np.maximum(n, 1)
+        m[n == 0] = 0
+        frames.append(m.astype(fs[0].dtype))
         days.append(day)
+    if not frames:
+        return None, []
     return np.stack(frames, 0), days
 
 
@@ -130,13 +138,13 @@ def merge(out):
         S = SQ = None; N = 0
         for f in sorted(_g.glob(os.path.join(out, "_norm", f"*_{nm}.json"))):
             d = json.load(open(f))
-            if not d["n"]:
+            if not np.any(d["n"]):
                 continue
-            s, sq, n = np.array(d["sum"]), np.array(d["sqsum"]), d["n"]
+            s, sq, n = np.array(d["sum"]), np.array(d["sqsum"]), np.array(d["n"])
             S = s if S is None else S + s
             SQ = sq if SQ is None else SQ + sq
             N += n
-        if N:
+        if np.any(N):
             mean = S / N; std = np.sqrt(np.maximum(SQ / N - mean ** 2, 0))
             # PASTIS dataloader keys norm per fold (Fold_1..Fold_5) and averages
             # over the selected folds; we compute stats on train only, so write
@@ -183,7 +191,7 @@ def main():
             print(f"  SKIP {i}: no S2", flush=True); continue
         np.save(os.path.join(args.out, "DATA_S2", f"S2_{pid}.npy"), s2.astype(np.uint16))
         if s1 is not None:
-            # convert to dB like PASTIS-R (10*log10), keep float32
+            # raw linear backscatter (not dB), float32
             s1f = s1.astype(np.float32)
             np.save(os.path.join(args.out, "DATA_S1", f"S1_{pid}.npy"), s1f)
         np.save(os.path.join(args.out, "ANNOTATIONS", f"TARGET_{pid}.npy"), read_target(w))
@@ -194,10 +202,13 @@ def main():
             n_s2["sqsum"] = (x**2).sum(1) if n_s2["sqsum"] is None else n_s2["sqsum"] + (x**2).sum(1)
             n_s2["n"] += x.shape[1]
             if s1 is not None:
+                # S1 stats over valid pixels only (0 = no observation)
                 y = s1.astype(np.float64).transpose(1, 0, 2, 3).reshape(s1.shape[1], -1)
-                n_s1["sum"] = y.sum(1) if n_s1["sum"] is None else n_s1["sum"] + y.sum(1)
-                n_s1["sqsum"] = (y**2).sum(1) if n_s1["sqsum"] is None else n_s1["sqsum"] + (y**2).sum(1)
-                n_s1["n"] += y.shape[1]
+                ok = y != 0
+                s, sq, n = (y * ok).sum(1), (y**2 * ok).sum(1), ok.sum(1)
+                n_s1["sum"] = s if n_s1["sum"] is None else n_s1["sum"] + s
+                n_s1["sqsum"] = sq if n_s1["sqsum"] is None else n_s1["sqsum"] + sq
+                n_s1["n"] = n if isinstance(n_s1["n"], int) else n_s1["n"] + n
         rows.append({
             "ID_PATCH": pid,
             "dates-S2": json.dumps({str(k): int(v) for k, v in enumerate(d2)}),
@@ -217,7 +228,7 @@ def main():
         json.dump(
             {"sum": acc["sum"].tolist() if acc["sum"] is not None else [],
              "sqsum": acc["sqsum"].tolist() if acc["sqsum"] is not None else [],
-             "n": acc["n"]},
+             "n": acc["n"].tolist() if hasattr(acc["n"], "tolist") else acc["n"]},
             open(os.path.join(args.out, "_norm", f"{lo:06d}_{nm}.json"), "w"))
     print(f"shard {lo}:{hi} done: {len(rows)} patches", flush=True)
 

@@ -13,7 +13,7 @@ PASTIS-R dataloaders, collate functions and panoptic metrics work unchanged.
 | Path | Shape / dtype | Description |
 |---|---|---|
 | `DATA_S2/S2_<id>.npy` | `(T_s2, 10, 128, 128)` uint16 | Sentinel-2 L2A time series. Bands B02,B03,B04,B05,B06,B07,B08,B8A,B11,B12. Variable T (40–150 unique dates, median 87). |
-| `DATA_S1/S1_<id>.npy` | `(T_s1, 2, 128, 128)` float32 | Sentinel-1 (VV, VH) time series, raw backscatter (not dB). Variable T (40–150, median 123). |
+| `DATA_S1/S1_<id>.npy` | `(T_s1, 2, 128, 128)` float32 | Sentinel-1 (VV, VH) time series, raw linear backscatter (not dB). `0` = no valid observation for that pixel/date (0.3% of pixels, mostly at swath edges). Variable T (40–150, median 123). |
 | `DATA_LS/LS_<id>.npy` | `(T_ls, 10, 64, 64)` uint16 | Landsat-8 OLI/TIRS time series. Bands B1,B2,B3,B4,B5,B6,B7,B9,B10,B11. Resampled from Landsat's native 30 m onto a 20 m grid, so 64&times;64 covers the same 1,280 m patch footprint as the 128&times;128 S2/S1 arrays. Variable T (28&ndash;61 unique dates, median 30). |
 | `DATA_LS_PAN/LSPAN_<id>.npy` | `(T_ls, 1, 128, 128)` uint16 | Landsat-8 panchromatic B8, resampled from its native 15 m onto the 10 m grid, hence a separate array from the multispectral bands. Same T and same dates as `DATA_LS`. |
 | `ANNOTATIONS/TARGET_<id>.npy` | `(1, 128, 128)` uint8 | Semantic labels: 8 classes + 255 void (below). |
@@ -22,7 +22,7 @@ PASTIS-R dataloaders, collate functions and panoptic metrics work unchanged.
 | `INSTANCE_ANNOTATIONS/HEATMAP_<id>.npy` | `(128, 128)` float32 | Object-centerness heatmap (PaPs convention). |
 | `INSTANCE_ANNOTATIONS/ZONES_<id>.npy` | `(128, 128)` int32 | Pixel → nearest-center instance (Voronoi zones). |
 | `metadata.geojson` | 2,750 rows | Per-patch `ID_PATCH`, `dates-S2`, `dates-S1`, `dates-LS` (`{step: YYYYMMDD}`), `Fold`, `Island`, `geometry` (real patch polygon, EPSG:4326). |
-| `NORM_S2_patch.json`, `NORM_S1_patch.json` | — | Per-band train mean/std, keyed `Fold_1`..`Fold_5`. |
+| `NORM_S2_patch.json`, `NORM_S1_patch.json` | — | Per-band train mean/std, keyed `Fold_1`..`Fold_5`. S1 statistics are computed over valid (non-zero) pixels only. |
 | `sample/sample.parquet` | 25 rows | Preview split for the Hugging Face dataset viewer: S2 true-colour and colourised label PNGs plus per-patch metadata (island, split, CRS, bounds, sequence lengths, classes present). Random draw, seed 0. Previews only — train from the arrays above. |
 
 Same-day acquisitions are mosaicked to a single observation, so `dates-*` are unique
