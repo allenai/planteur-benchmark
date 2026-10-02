@@ -1,0 +1,12 @@
+# Data loaders and metrics (code/)
+torch
+numpy
+pandas
+geopandas
+scipy
+# Demo notebook, GeoTIFF labels and charts
+matplotlib
+rasterio
+# data_generation/ scripts
+shapely
+pyproj
