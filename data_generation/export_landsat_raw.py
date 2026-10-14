@@ -1,17 +1,17 @@
 """Export materialized Landsat-8 to the PLANTEUR/HF layout.
 
-  DATA_LS/LS_<id>.npy         (T, 10, 64, 64)  uint16   B1-B7,B9,B10,B11 (native)
-  DATA_LS_PAN/LSPAN_<id>.npy  (T,  1,128,128)  uint16   B8 panchromatic (native)
+  DATA_LS/LS_<id>.npy         (T, 10, 64, 64)  uint16   B1-B7,B9,B10,B11 (20 m)
+  DATA_LS_PAN/LSPAN_<id>.npy  (T,  1,128,128)  uint16   B8 panchromatic (10 m)
   _dates_ls/<id>.json         {step: YYYYMMDD} -> merged into metadata.geojson as dates-LS
   NORM_LS_patch.json, NORM_LS_PAN_patch.json  (run with `norm` after dates-LS is merged)
 
-ID_PATCH is the index into sorted(windows) -- verified against DATA_S2 and the
-existing dates-S2 before this ran.  Same-day acquisitions are mosaicked (mean over
-non-zero frames) and frames are chronological, matching export_pastis_raw.py.
+ID_PATCH is the index into sorted(windows), as in export_planteur_raw.py.  Same-day
+acquisitions are mosaicked (mean over non-zero frames) and frames are chronological,
+matching export_planteur_raw.py.
 
-This exporter does not resample: the arrays keep the grids rslearn materialized them
-on -- the multispectral bands on a 20 m 64x64 grid (zoom_offset -1, from native 30 m) and
-B8 on the 10 m 128x128 grid (from native 15 m).  (export_pastis_raw.build_series
+Resampling happens when rslearn materializes the data, not here: the multispectral
+bands on a 20 m 64x64 grid (zoom_offset -1, from native 30 m) and B8 on the 10 m
+128x128 grid (from native 15 m).  (export_planteur_raw.build_series
 hard-skips any frame that is not 128x128, which would have silently produced empty
 Landsat arrays -- that guard is why this is a separate exporter.)
 """
@@ -21,7 +21,7 @@ from multiprocessing import Pool
 import numpy as np, rasterio
 
 # Set before running: the rslearn dataset with materialized Landsat, and the dataset root.
-SRC = "<RSLEARN_DATASET>/national_ds"
+SRC = "<RSLEARN_DATASET>"
 OUT = "<PLANTEUR_ROOT>"
 MS  = "B1_B2_B3_B4_B5_B6_B7_B9_B10_B11"
 PAN = "B8"

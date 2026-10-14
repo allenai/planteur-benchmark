@@ -1,7 +1,7 @@
 {
  "scheme": "spatial-block, territory-stratified 70/15/15",
  "source": "metadata.geojson 'split' property; identical assignment, exposed here as explicit ID lists to match splits/loio.json",
- "description": "Each 128x128 px window is assigned to the 0.1 deg (~11 km) lon/lat cell containing its centroid, and the split is assigned to the CELL, so every window in a neighbourhood shares a partition. Windows are densely tiled and adjacent windows observe the same landscape, crop calendar and often the same RPG parcels straddling a boundary, so block-level partitioning is required to avoid leakage. Within a territory, cells are ordered by a stable hash of the block key, SHA-256(key)/2^256, and assigned cumulatively to train, val, test until 70/85/100% of that territory's windows are covered. The 70/15/15 allocation is applied independently per territory so all five DROM territories -- and therefore both the temperate classes shared with PASTIS and the four tropical classes unique to PLANTEUR -- appear in all three partitions.",
+ "description": "Each 128x128 px window is assigned to the 0.1 deg (~11 km) lon/lat cell containing its centroid, and the split is assigned to the CELL, so every window in a neighbourhood shares a partition. Windows are densely tiled and adjacent windows observe the same landscape, crop calendar and often the same RPG parcels straddling a boundary, so block-level partitioning is required to avoid leakage. Within a territory, cells are ordered by a stable hash of the block key, SHA-256(key)/2^256, and assigned cumulatively to train, val, test until 70/85/100% of that territory's windows are covered. The 70/15/15 allocation is applied independently per territory so all five DROM territories -- and therefore every crop class -- appear in all three partitions (Saint-Martin's 6 patches are all in train).",
  "block_deg": 0.1,
  "ratios": {
   "train": 0.7,
@@ -35,7 +35,7 @@
    "train": 55,
    "test": 64
   },
-  "Reunion": {
+  "Réunion": {
    "train": 524,
    "test": 172,
    "val": 117

@@ -5,7 +5,7 @@ from the French RPG. This reproduces that CODE_CULTU -> class_id mapping so it c
 applied nationwide (all of France incl. DROM/Corsica), instead of only the 4 original
 Sentinel-2 tiles.
 
-Class indices (must match the existing eval's PASTIS_NAMES):
+Class indices:
   0 Background   1 Meadow            2 Soft winter wheat   3 Corn
   4 Winter barley 5 Winter rapeseed  6 Spring barley       7 Sunflower
   8 Grapevine    9 Beet             10 Winter triticale   11 Winter durum wheat
@@ -19,8 +19,8 @@ CODE_CULTU precision, not CODE_GROUP). The long tail is bucketed by keyword rule
 trees/olives -> 16). Everything unmatched -> 0 (background), which is also how PASTIS
 treats crops outside its 18 (incl. tropical DROM crops like banana/sugarcane/vanilla).
 
-Codes whose PASTIS assignment is ambiguous are listed in FLAGGED with the reasoning for the
-class chosen, for transparency.
+Codes whose PASTIS assignment is a judgement call are listed in JUDGEMENT_CALLS with the
+reasoning for the class chosen.
 
 Run:  python build_pastis_rpg_map.py   # writes pastis_rpg_class_map.json
 """
@@ -268,14 +268,13 @@ def classify(code: str, label: str) -> int:
     return BACKGROUND
 
 
-# Codes whose PASTIS assignment is a judgement call -> review vs official Nomenclature.
-FLAGGED = {
-    "BVF": "fodder beet -> Beet(9)? PASTIS 'Beet' is likely sugar beet only.",
-    "MIE": "silage maize -> Corn(3)? PASTIS may restrict Corn to grain maize (MIS).",
-    "MID": "sweet corn -> Fruits/veg(12) via rule, not Corn(3).",
-    "MCR": "cereal mix -> Mixed cereal(17); confirm vs méteil-style codes.",
-    "CPL": "cereal+protein forage mix -> currently Background; maybe Mixed cereal(17).",
-    "PFR": "red berries -> Fruits/veg(12) vs Orchard(16).",
+JUDGEMENT_CALLS = {
+    "BVF": "fodder beet -> Beet(9), although PASTIS 'Beet' may be sugar beet only.",
+    "MIE": "silage maize -> Corn(3), with grain maize (MIS).",
+    "MID": "sweet corn -> Fruits/veg(12) via the vegetable rule, not Corn(3).",
+    "MCR": "cereal mix -> Mixed cereal(17).",
+    "CPL": "cereal+protein forage mix -> Leguminous fodder(14).",
+    "PFR": "red berries -> Fruits/veg(12) rather than Orchard(16).",
     "grain_legumes": "PHI/PPR/PPO/PCH/LEC/FVL/LDH/LDP (grain pulses) -> Background "
     "(PASTIS has no pulse-grain class); only *forage* legumes -> 14.",
     "spring_variants": "BTP/BDP/TTP/CZP/SGP/AVP (spring wheat/durum/triticale/rapeseed) "
@@ -306,10 +305,10 @@ def main() -> None:
         json.dumps(
             {
                 "_doc": "RPG CODE_CULTU -> PASTIS-18 class id. 0=Background. See "
-                "build_pastis_rpg_map.py for rules; flagged_for_review lists ambiguous codes and the "
+                "build_pastis_rpg_map.py for rules; judgement_calls lists ambiguous codes and the "
                 "reasoning for their assignment.",
                 "class_names": PASTIS_NAMES,
-                "flagged_for_review": FLAGGED,
+                "judgement_calls": JUDGEMENT_CALLS,
                 "code_to_class": mapping,
             },
             ensure_ascii=False,

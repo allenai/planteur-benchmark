@@ -1,0 +1,10 @@
+The code under `code/`, and the centerness heatmap functions (`bbox`, `splat`) in
+`data_generation/export_planteur_panoptic.py`, are adapted from the PASTIS benchmark
+(https://github.com/VSainteuf/pastis-benchmark), Copyright (c) 2022 Vivien Sainte
+Fare Garnot (VSainteuf), used and redistributed under the MIT License in LICENSE.
+
+LICENSE covers the code in this repository. The dataset itself
+(https://huggingface.co/datasets/allenai/planteur-benchmark) is licensed under
+ODC-BY; it is derived from Copernicus Sentinel-1/-2 data (via the Microsoft
+Planetary Computer), USGS Landsat 8 data and the French Registre Parcellaire
+Graphique (IGN). See the README for source attribution.

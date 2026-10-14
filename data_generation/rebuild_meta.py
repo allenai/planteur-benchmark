@@ -1,16 +1,16 @@
 """Rebuild metadata.geojson with DEDUPED dates that exactly match the (already
 deduped) DATA_S2/DATA_S1 .npy arrays, without re-reading any geotiffs.
 
-The per-shard _meta/*.geojson were written by an older code path and still list
-the raw (pre-mosaic) acquisition dates (e.g. 150 S2 entries with only 81 unique),
-which breaks pastis-benchmark's dataloader (duplicate date-table labels). The
-DATA_*.npy were re-exported with same-date mosaicking, so the correct date list
-per patch is simply the sorted unique acquisition dates -- provided every raw
+Use this when the per-shard _meta/*.geojson list the raw (pre-mosaic) acquisition
+dates (e.g. 150 S2 entries with only 81 unique), which breaks pastis-benchmark's
+dataloader (duplicate date-table labels). The DATA_*.npy hold one frame per date
+after same-date mosaicking, so the correct date list per patch is simply the sorted
+unique acquisition dates -- provided every raw
 group had a valid 128x128 tile (no skips). We verify that invariant by comparing
 the unique-date count to the actual array frame count; any mismatch is reported
 so it can be re-exported the slow way.
 
-Run: python rebuild_meta.py --src data/national_ds --group rpg_2019_dec31 \
+Run: python rebuild_meta.py --src <RSLEARN_DATASET> --group rpg_2019_dec31 \
         --out <PLANTEUR_ROOT>
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ import argparse, glob, json, os
 
 import numpy as np
 import geopandas as gpd
-from export_pastis_raw import _acq_dates, patch_polygon, FOLD_OF
+from export_planteur_raw import _acq_dates, patch_polygon, FOLD_OF
 
 
 def dedup_days(window: str, layer: str) -> list[int]:

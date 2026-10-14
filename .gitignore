@@ -1,4 +1,3 @@
-TODO.txt
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -133,10 +132,15 @@ dmypy.json
 .pyre/
 
 # --- PLANTEUR dataset payload (host externally; do not commit) ---
-DATA_S2/
-DATA_S1/
-ANNOTATIONS/
+DATA_*/
+ANNOTATIONS*/
 INSTANCE_ANNOTATIONS/
+MONTHLY/
+EMB_*/
+EMB_MISSING.json
+sample/
 *.npy
+*.tif
 metadata.geojson
 NORM_*.json
+splits/fewshot_pixels.json

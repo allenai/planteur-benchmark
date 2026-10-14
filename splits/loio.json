@@ -1,12 +1,12 @@
 {
  "scheme": "leave-one-island-out",
- "source": "metadata.geojson Island + the spatial-block, territory-stratified assignment of data_generation/assign_splits.py; patch IDs are those of metadata.geojson",
- "description": "Per fold: test = all patches of the held-out territory; train/val come from the spatial-block (0.1 deg), territory-stratified 70/15/15 assignment over the remaining territories. Saint-Martin (6 patches) is never held out.",
+ "source": "metadata.geojson Island; the train/val/test lists used for the paper's leave-one-island-out experiments; patch IDs are those of metadata.geojson",
+ "description": "Per fold: test = all patches of the held-out territory; train/val split the remaining territories' patches (about 88/12). Unlike splits/443.json, train and val are not block-aligned and share 0.1 deg blocks, so val scores are optimistic; test never shares a block with train or val. Saint-Martin (6 patches) is never held out.",
  "rotation": [
   "Guadeloupe",
   "Martinique",
   "Guyane",
-  "Reunion",
+  "Réunion",
   "Mayotte"
  ],
  "excluded_from_rotation": {
@@ -8287,7 +8287,7 @@
     2749
    ]
   },
-  "Reunion": {
+  "Réunion": {
    "train": [
     0,
     1,

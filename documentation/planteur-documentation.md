@@ -3,10 +3,10 @@
 PLANTEUR is a crop-type **semantic + panoptic** segmentation benchmark over the
 five French overseas *départements et régions d'outre-mer* (DROM): **Guadeloupe,
 Martinique, Guyane, Réunion, Mayotte**, plus 6 patches from Saint-Martin, an overseas
-collectivity (*collectivité d'outre-mer*, COM). It is packaged in the **exact original
-[PASTIS](https://github.com/VSainteuf/pastis-benchmark) file format** so that PASTIS /
-PASTIS-R dataloaders, collate functions and panoptic metrics work unchanged on the
-Sentinel-2, Sentinel-1 and label arrays (Landsat needs the loader in this repository).
+collectivity (*collectivité d'outre-mer*, COM). It is packaged in almost the **exact same
+[PASTIS](https://github.com/VSainteuf/pastis-benchmark) file format** so that existing PASTIS
+dataloaders work mostly unchanged with the Sentinel-2, Sentinel-1, and label arrays
+(Landsat-8, which PASTIS does not have, needs the loader in this repository).
 
 ## 1. Contents
 
@@ -23,9 +23,14 @@ Sentinel-2, Sentinel-1 and label arrays (Landsat needs the loader in this reposi
 | `INSTANCE_ANNOTATIONS/INSTANCES_<id>.npy` | `(128, 128)` int32 | Per-pixel parcel/instance id (0 = no parcel: Background or void). IDs are globally unique, so a parcel crossing a patch border has the same ID in each patch. |
 | `INSTANCE_ANNOTATIONS/HEATMAP_<id>.npy` | `(128, 128)` float32 | Object-centerness heatmap (PaPs convention). |
 | `INSTANCE_ANNOTATIONS/ZONES_<id>.npy` | `(128, 128)` int32 | Pixel → nearest-center instance (Voronoi zones). |
-| `metadata.geojson` | 2,750 rows | Per-patch `ID_PATCH`, `dates-S2`, `dates-S1`, `dates-LS` (`{step: YYYYMMDD}`), `Fold`, `split` (`train`/`val`/`test`, same assignment as `Fold`), `Island`, `geometry` (real patch polygon, EPSG:4326). |
+| `metadata.geojson` | 2,750 rows | Per-patch `ID_PATCH`, `dates-S2`, `dates-S1`, `dates-LS` (`{step: YYYYMMDD}`), `orbits-S1` (`{step: "A"\|"D"\|"AD"}`, the Sentinel-1 orbit direction of each `dates-S1` step; `"AD"` = same-day ascending and descending passes averaged), `Fold`, `split` (`train`/`val`/`test`, same assignment as `Fold`), `Island`, `geometry` (real patch polygon, EPSG:4326). |
 | `NORM_S2_patch.json`, `NORM_S1_patch.json`, `NORM_LS_patch.json`, `NORM_LS_PAN_patch.json` | — | Per-band train mean/std, keyed `Fold_1`..`Fold_5`. S1 and Landsat statistics are computed over valid (non-zero) pixels only. |
 | `sample/sample.parquet` | 25 rows | Preview split for the Hugging Face dataset viewer: S2 true-colour and colourised label PNGs plus per-patch metadata (island, split, CRS, bounds, sequence lengths, classes present). Random draw, seed 0. Previews only — train from the arrays above. |
+| `DATA_S2_MONTHLY/S2_<id>.npy` | `(12, 12, 128, 128)` uint16 | The paper's monthly inputs: 12 monthly 2019 mosaics (month m = 2019-01-01 + 30m days), the `DATA_S2` bands then B01,B09. Same for `DATA_S1_MONTHLY`, `DATA_LS_MONTHLY`, `DATA_LS_PAN_MONTHLY`; `MONTHLY/months.json` lists which months have a scene. |
+| `NORM_S2_MONTHLY_patch.json` | — | Train mean/std of the 10 `DATA_S2` bands of the monthly mosaics. |
+| `ANNOTATIONS_BALANCED/TARGET_<id>.npy` | `(1, 128, 128)` uint8 | Class-balanced training labels: in `train` patches, Background pixels set to void until Background equals the crop pixels; `val`/`test` identical to `ANNOTATIONS`. |
+| `splits/fewshot_pixels.json` | — | Few-shot training pixels, `[row, col, class]` per patch, for X = 10/25/100/1000 per class. |
+| `EMB_*/<name>_<id>.npy` | `(C, 128, 128)` float32 | Precomputed embeddings on the label grid (AlphaEarth, Tessera v1/v1.1/v2, OlmoEarth); `EMB_MISSING.json` lists patches without one. No-data pixels: Tessera v1 all-zero vectors (149 patches, 7 entirely zero: 291, 934, 989, 1015, 1038, 1058, 1980) or `NaN` (6 patches); Tessera v1.1 `NaN` (4 patches); AEF would use `-1` but has none; Tessera v2 and OlmoEarth v1.3 have none. |
 
 Same-day acquisitions are mosaicked to a single observation, so `dates-*` are unique
 and chronological and their length matches the array T (PASTIS's one-observation-per-date rule).
@@ -49,10 +54,13 @@ and near 60 for sidelap; 2,331 of 2,750 patches are in the 30s).
 Void is **255**. Agricultural parcels whose crop type is outside this taxonomy (Corn,
 Grapevine, Beet, Potatoes, Leguminous fodder, Soybeans, Vanilla, Ylang-ylang,
 Coffee/Cacao, plus temperate classes absent from the DROM) are mapped to void and must
-be excluded from loss and metrics — **not** folded into Background. Background (0) is
-therefore genuine non-agricultural land only, and remains a real trained class. Void
-covers 92,145 px (0.20% of pixels) in 385 patches. Void fields are not parcel instances: no
-instance in `INSTANCE_ANNOTATIONS` contains void pixels, and every parcel has a single class.
+be excluded from loss and metrics — **not** folded into Background. Background (0) is land
+outside the RPG plus RPG parcels whose crop code has no class in the 26-class source
+nomenclature (e.g. grain pulses, spring cereal variants, aromatic plants, unspecified
+crops), and remains a real trained class. Void covers 92,145 px (0.20% of pixels) in 385
+patches. Only crop parcels (classes 1–7) are instances: no instance in
+`INSTANCE_ANNOTATIONS` contains Background or void pixels, and every parcel has a single
+class.
 The full 26-class → class-id mapping is in `class_map.json`.
 
 **Representing void in a trainer.** Void is `255` on disk, which metric code handles
@@ -63,7 +71,8 @@ eight trained class ids are unchanged either way.
 
 
 Colors for visualization are in `colormap.txt`, one `<class id> <R> <G> <B>` line per
-trained class (0–7). Void has no entry; render it as white/transparent.
+trained class (0–7), matching the map in the README. Void has no entry; render it as dark
+grey (43 52 56), as the map does.
 
 ## 3. Splits
 
@@ -96,8 +105,10 @@ all three). Each patch only holds the part of the parcel inside it.
 ### Leave-one-island-out (LOIO)
 
 `splits/loio.json` holds five additional configurations. For each held-out territory,
-`test` is all of its patches; `train`/`val` come from the same spatial-block,
-territory-stratified 70/15/15 assignment over the remaining territories.
+`test` is all of its patches; `train`/`val` split the remaining territories' patches
+(about 88/12), as used in the paper. Unlike the default split, this train/val split is not
+block-aligned: train and val share 0.1° blocks, so val scores are optimistic. `test` never
+shares a block with `train` or `val`.
 
 | held-out (test) | train | val | test |
 |---|--:|--:|--:|
@@ -115,7 +126,7 @@ labelled but never held out — it stays in `train` for every fold.
 
 Patch counts: Réunion 813 · Guadeloupe 735 · Martinique 550 · Guyane 506 · Mayotte 140 ·
 Saint-Martin 6 (a COM, not a DROM, labelled separately in `metadata.geojson.Island`).
-Total unique parcels: **47,256** (58,488 parcel–patch instances, since 9,798 parcels cross a
+Total unique parcels: **47,256** (58,489 parcel–patch instances, since 9,799 parcels cross a
 patch border and keep the same instance ID in each patch). Per-class distributions (pixels / windows / parcels) per
 island are shown in `../images/{pixels,windows,parcels}_per_class_per_island.png`.
 Island crop signatures: sugarcane dominates Réunion & Guadeloupe; banana dominates
@@ -142,8 +153,10 @@ ds = PLANTEUR_Dataset(folder="<PLANTEUR_ROOT>", sats=["S2"], folds=[1])      # t
 (data, dates), target = ds[0]
 ```
 
-`sats` takes any of `"S2"`, `"S1"`, `"LS"` and `"LS_PAN"`; each returns its own time series and
-dates (`LS` and `LS_PAN` share `dates-LS`).
+`sats` takes any of `"S2"`, `"S1"`, `"LS"`, `"LS_PAN"` and `"S2_MONTHLY"`; each returns its own
+time series and dates (`LS` and `LS_PAN` share `dates-LS`; `S2_MONTHLY` returns the 10 `DATA_S2`
+bands of the 12 monthly mosaics, dated mid-month). `annotations="ANNOTATIONS_BALANCED"` loads
+the class-balanced training labels.
 
 For parcel classification, `dataloader_pixelset.PLANTEUR_Dataset_PixelSet` yields PASTIS-R-style
 pixel sets: one sample per parcel instance per patch, labelled with its semantic class (void and

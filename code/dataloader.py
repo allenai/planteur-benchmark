@@ -1,11 +1,6 @@
-"""
-Author: Vivien Sainte Fare Garnot (github.com/VSainteuf)
-License MIT
-"""
-
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import geopandas as gpd
 import numpy as np
@@ -20,7 +15,23 @@ SATS = {
     "S1": ("DATA_S1", "S1", "dates-S1"),
     "LS": ("DATA_LS", "LS", "dates-LS"),
     "LS_PAN": ("DATA_LS_PAN", "LSPAN", "dates-LS"),
+    "S2_MONTHLY": ("DATA_S2_MONTHLY", "S2", None),
 }
+# DATA_S2_MONTHLY month m covers 2019-01-01 + 30m days; dated at its middle, and loaded with
+# the 10 DATA_S2 bands only (B01/B09 follow in the array).
+MONTHLY_DATES = {
+    str(m): int((datetime(2019, 1, 16) + timedelta(days=30 * m)).strftime("%Y%m%d"))
+    for m in range(12)
+}
+FOLDS = (1, 4, 5)  # train, val, test
+
+
+def prepare_dates(date_dict, reference_date):
+    """Days since reference_date of each observation, in chronological order."""
+    return np.array([
+        (datetime.strptime(str(date_dict[k]), "%Y%m%d") - reference_date).days
+        for k in sorted(date_dict, key=int)
+    ])
 
 
 class PLANTEUR_Dataset(tdata.Dataset):
@@ -35,7 +46,8 @@ class PLANTEUR_Dataset(tdata.Dataset):
         reference_date="2018-09-01",
         class_mapping=None,
         mono_date=None,
-        sats=["S2"],
+        sats=("S2",),
+        annotations="ANNOTATIONS",
     ):
         """
         Pytorch Dataset class to load samples from the PLANTEUR dataset, for semantic and
@@ -50,7 +62,9 @@ class PLANTEUR_Dataset(tdata.Dataset):
         Args:
             folder (str): Path to the dataset
             norm (bool): If true, images are standardised using pre-computed
-                channel-wise means and standard deviations.
+                channel-wise means and standard deviations. S1 and Landsat use 0 for
+                no observation; those pixels are standardised like the rest (to
+                -mean/std), so mask them on the raw arrays if they matter.
             reference_date (str, Format : 'YYYY-MM-DD'): Defines the reference date
                 based on which all observation dates are expressed. Along with the image
                 time series and the target tensor, this dataloader yields the sequence
@@ -86,11 +100,15 @@ class PLANTEUR_Dataset(tdata.Dataset):
                 in format 'YYYY-MM-DD' and the closest available date will be selected.
             sats (list): defines the satellites to use, any of
                 'S2' (Sentinel-2, 10 bands, 128x128), 'S1' (Sentinel-1 VV/VH, 128x128),
-                'LS' (Landsat-8 multispectral, 10 bands, 64x64) and
-                'LS_PAN' (Landsat-8 panchromatic B8, 128x128).
+                'LS' (Landsat-8 multispectral, 10 bands, 64x64),
+                'LS_PAN' (Landsat-8 panchromatic B8, 128x128) and
+                'S2_MONTHLY' (the 12 monthly 2019 Sentinel-2 mosaics used in the
+                experiments, 10 bands, 128x128).
                 For example sats=['S2', 'S1'] for optical + radar time series.
                 Each satellite has its own time series length and dates; 'LS' and
                 'LS_PAN' share the same dates.
+            annotations (str): Folder of the semantic labels, 'ANNOTATIONS' (default)
+                or 'ANNOTATIONS_BALANCED' for the class-balanced training labels.
         """
         super(PLANTEUR_Dataset, self).__init__()
         self.folder = folder
@@ -113,9 +131,10 @@ class PLANTEUR_Dataset(tdata.Dataset):
             else class_mapping
         )
         self.target = target
+        self.annotations = annotations
         unknown = [s for s in sats if s not in SATS]
         assert not unknown, "Unknown satellite {} (available: {})".format(unknown, list(SATS))
-        self.sats = sats
+        self.sats = list(sats)
 
         # Get metadata
         print("Reading patch metadata . . .")
@@ -123,34 +142,23 @@ class PLANTEUR_Dataset(tdata.Dataset):
         self.meta_patch.index = self.meta_patch["ID_PATCH"].astype(int)
         self.meta_patch.sort_index(inplace=True)
 
-        self.date_tables = {s: None for s in sats}
-        self.date_range = np.array(range(-200, 600))
-        for s in sats:
-            dates = self.meta_patch[SATS[s][2]]
-            date_table = pd.DataFrame(
-                index=self.meta_patch.index, columns=self.date_range, dtype=int
+        self.dates = {}
+        for s in self.sats:
+            dates = (
+                self.meta_patch[SATS[s][2]]
+                if SATS[s][2]
+                else pd.Series([MONTHLY_DATES] * len(self.meta_patch), index=self.meta_patch.index)
             )
-            for pid, date_seq in dates.items():
-                if type(date_seq) == str:
-                    date_seq = json.loads(date_seq)
-                d = pd.DataFrame().from_dict(date_seq, orient="index")
-                d = d[0].apply(
-                    lambda x: (
-                        datetime(int(str(x)[:4]), int(str(x)[4:6]), int(str(x)[6:]))
-                        - self.reference_date
-                    ).days
-                )
-                date_table.loc[pid, d.values] = 1
-            date_table = date_table.fillna(0)
-            self.date_tables[s] = {
-                index: np.array(list(d.values()))
-                for index, d in date_table.to_dict(orient="index").items()
+            self.dates[s] = {
+                pid: prepare_dates(json.loads(d) if isinstance(d, str) else d, self.reference_date)
+                for pid, d in dates.items()
             }
 
         print("Done.")
 
         # Select Fold samples
         if folds is not None:
+            assert set(folds) <= set(FOLDS), "folds must be among {}".format(FOLDS)
             self.meta_patch = pd.concat(
                 [self.meta_patch[self.meta_patch["Fold"] == f] for f in folds]
             )
@@ -182,7 +190,7 @@ class PLANTEUR_Dataset(tdata.Dataset):
         return self.len
 
     def get_dates(self, id_patch, sat):
-        return self.date_range[np.where(self.date_tables[sat][id_patch] == 1)[0]]
+        return self.dates[sat][id_patch]
 
     def __getitem__(self, item):
         id_patch = self.id_patches[item]
@@ -196,7 +204,7 @@ class PLANTEUR_Dataset(tdata.Dataset):
                         SATS[satellite][0],
                         "{}_{}.npy".format(SATS[satellite][1], id_patch),
                     )
-                ).astype(np.float32)
+                ).astype(np.float32)[:, : 10 if satellite == "S2_MONTHLY" else None]
                 for satellite in self.sats
             }  # T x C x H x W arrays
             data = {s: torch.from_numpy(a) for s, a in data.items()}
@@ -211,13 +219,13 @@ class PLANTEUR_Dataset(tdata.Dataset):
             if self.target == "semantic":
                 target = np.load(
                     os.path.join(
-                        self.folder, "ANNOTATIONS", "TARGET_{}.npy".format(id_patch)
+                        self.folder, self.annotations, "TARGET_{}.npy".format(id_patch)
                     )
                 )
-                target = torch.from_numpy(target[0].astype(int))
-
+                target = target[0].astype(int)
                 if self.class_mapping is not None:
                     target = self.class_mapping(target)
+                target = torch.from_numpy(target)
 
             elif self.target == "instance":
                 heatmap = np.load(
@@ -245,7 +253,7 @@ class PLANTEUR_Dataset(tdata.Dataset):
 
                 pixel_semantic_annotation = np.load(
                     os.path.join(
-                        self.folder, "ANNOTATIONS", "TARGET_{}.npy".format(id_patch)
+                        self.folder, self.annotations, "TARGET_{}.npy".format(id_patch)
                     )
                 )
 
@@ -263,9 +271,13 @@ class PLANTEUR_Dataset(tdata.Dataset):
                         h = (instance_ids == instance_id).any(axis=-1).sum()
                         w = (instance_ids == instance_id).any(axis=-2).sum()
                         size[pixel_to_object_mapping == instance_id] = (h, w)
+                        classes, counts = np.unique(
+                            pixel_semantic_annotation[instance_ids == instance_id],
+                            return_counts=True,
+                        )
                         object_semantic_annotation[
                             pixel_to_object_mapping == instance_id
-                        ] = pixel_semantic_annotation[instance_ids == instance_id][0]
+                        ] = classes[counts.argmax()]
 
                 target = torch.from_numpy(
                     np.concatenate(
@@ -318,19 +330,6 @@ class PLANTEUR_Dataset(tdata.Dataset):
             return ({k: v.float() for k, v in data.items()}, dates), target
         else:
             return (data, dates), target
-
-
-def prepare_dates(date_dict, reference_date):
-    """Date formating."""
-    d = pd.DataFrame().from_dict(date_dict, orient="index")
-    d = d[0].apply(
-        lambda x: (
-            datetime(int(str(x)[:4]), int(str(x)[4:6]), int(str(x)[6:]))
-            - reference_date
-        ).days
-    )
-    return d.values
-
 
 
 # Backward-compatible alias (the dataset follows the PASTIS format).

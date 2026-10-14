@@ -1,12 +1,13 @@
-# Data loaders and metrics (code/)
-torch
-numpy
-pandas
-geopandas
-scipy
+# Data loaders (code/); tested at these minimums (with rasterio 1.3) and at the latest releases
+torch>=2.4,<3
+numpy>=1.26,<3
+pandas>=2.2,<4
+geopandas>=0.14,<2
+scipy>=1.11,<2
 # Demo notebook, GeoTIFF labels and charts
-matplotlib
-rasterio
+jupyter>=1.0,<2
+matplotlib>=3.8,<4
+rasterio>=1.3,<2
 # data_generation/ scripts
-shapely
-pyproj
+shapely>=2.0,<3
+pyproj>=3.6,<4

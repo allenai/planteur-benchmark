@@ -24,20 +24,13 @@ def pad_collate(batch, pad_value=0):
     elem = batch[0]
     elem_type = type(elem)
     if isinstance(elem, torch.Tensor):
-        out = None
         if len(elem.shape) > 0:
             sizes = [e.shape[0] for e in batch]
             m = max(sizes)
             if not all(s == m for s in sizes):
                 # pad tensors which have a temporal dimension
                 batch = [pad_tensor(e, m, pad_value=pad_value) for e in batch]
-        if torch.utils.data.get_worker_info() is not None:
-            # If we're in a background process, concatenate directly into a
-            # shared memory tensor to avoid an extra copy
-            numel = sum([x.numel() for x in batch])
-            storage = elem.storage()._new_shared(numel)
-            out = elem.new(storage)
-        return torch.stack(batch, 0, out=out)
+        return torch.stack(batch, 0)
     elif (
         elem_type.__module__ == "numpy"
         and elem_type.__name__ != "str_"

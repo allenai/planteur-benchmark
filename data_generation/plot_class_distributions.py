@@ -15,12 +15,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-ISLANDS = ["Guadeloupe", "Martinique", "Reunion", "Guyane", "Mayotte", "Saint-Martin"]
-DISPLAY = {"Reunion": "Réunion"}
+ISLANDS = ["Guadeloupe", "Martinique", "Réunion", "Guyane", "Mayotte", "Saint-Martin"]
 CLASSES = ["Background", "Meadow", "Fruits, vegetables, flowers", "Orchard", "Sugarcane", "Banana",
            "Pineapple", "Tropical tuber"]
-_TAB10 = plt.get_cmap("tab10").colors
-COLORS = [_TAB10[i] for i in (0, 1, 2, 4, 5, 7, 8, 9)]  # one per class id 0-7
+COLORS = ["#dceaf5", "#3ccf6e", "#ffb02e", "#e8433a", "#f5e54a", "#3da5f4", "#b072e8", "#ff7fc8"]
 
 
 def patch_stats(args):
@@ -39,14 +37,15 @@ def plot(counts, n_patches, ylabel, title, classes, path):
     fig, axes = plt.subplots(2, 3, figsize=(20, 9.2))
     for ax, isl in zip(axes.ravel(), ISLANDS):
         v = [counts[isl][c] for c in classes]
-        ax.bar(range(len(classes)), v, color=[COLORS[c] for c in classes])
+        ax.bar(range(len(classes)), v, color=[COLORS[c] for c in classes],
+               edgecolor="#444444", linewidth=0.6)
         ax.set_yscale("log")
         ax.set_xticks(range(len(classes)))
         ax.set_xticklabels([CLASSES[c] for c in classes], rotation=40, ha="right", fontsize=9)
         ax.set_ylabel(ylabel)
         ax.grid(axis="y", alpha=0.3)
-        ax.set_title(f"{DISPLAY.get(isl, isl)}  (n={n_patches[isl]} patches)", fontweight="bold")
-    fig.suptitle(f"PLANTEUR — {title}, per island", fontsize=16, fontweight="bold")
+        ax.set_title(f"{isl}  (n={n_patches[isl]} patches)", fontweight="bold")
+    fig.suptitle(f"PLANTEUR — {title}, per island (log scale)", fontsize=16, fontweight="bold")
     fig.tight_layout()
     fig.savefig(path, dpi=100)
     plt.close(fig)

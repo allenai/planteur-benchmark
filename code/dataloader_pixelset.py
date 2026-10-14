@@ -1,11 +1,3 @@
-"""
-Author: Vivien Sainte Fare Garnot (github.com/VSainteuf)
-License MIT
-
-Adapted for PLANTEUR: pixel sets are extracted on the fly from the patch arrays and
-INSTANCE_ANNOTATIONS, so no separate parcel-level export is needed.
-"""
-
 import json
 import os
 
@@ -18,10 +10,11 @@ import torch.utils.data as data
 from scipy.interpolate import interp1d
 from torch.nn import functional as F
 
-from dataloader import SATS
+from dataloader import FOLDS, SATS, prepare_dates
 
 VOID = 255
 BACKGROUND = 0
+PIXELSET_SATS = ("S2", "S1", "LS", "LS_PAN")
 
 
 class PLANTEUR_Dataset_PixelSet(data.Dataset):
@@ -30,7 +23,7 @@ class PLANTEUR_Dataset_PixelSet(data.Dataset):
             folder,
             norm=True,
             cache=False,
-            sats=["S2"],
+            sats=("S2",),
             reference_date="2018-09-01",
             n_pixel=32,
             geom_features=True,
@@ -82,22 +75,23 @@ class PLANTEUR_Dataset_PixelSet(data.Dataset):
             sats (list): defines the satellites to use, any of 'S2', 'S1', 'LS' and
                 'LS_PAN' (see dataloader.PLANTEUR_Dataset). For 'LS' (64x64 grid) a
                 Landsat pixel belongs to the parcel when at least 2 of the 4 10 m
-                pixels it covers do.
+                pixels it covers do, or at least 1 for parcels too small to fill any
+                Landsat pixel that way.
             reference_date (str, Format : 'YYYY-MM-DD'): Defines the reference date
                 based on which all observation dates are expressed. Along with the image
                 time series and the target tensor, this dataloader yields the sequence
                 of observation dates (in terms of number of days since the reference
                 date). This sequence of dates is used for instance for the positional
                 encoding in attention based approaches.
-            n_pixel (int): number of pixels randomly sampled from each parcel (default 32).,
-                geom_features (bool): If False no geometric descriptors of the parcel's shape
+            n_pixel (int): number of pixels randomly sampled from each parcel (default 32).
+            geom_features (bool): If False no geometric descriptors of the parcel's shape
                 are used in the Pixel-Set Encoder (default True).
             folds (list, optional): List of ints specifying which folds to load:
                 1 = train, 4 = val, 5 = test. By default (when None is specified) all
                 folds are loaded.
             ignore_label (int): If not None, the parcels annotated with this label are discarded from
                 the dataset.
-            label_offset (int): If not None this offset is substracted from the labels contained in the dataset
+            label_offset (int): If not None this offset is subtracted from the labels contained in the dataset
                 (default to 1: parcel classes are 1..7 since Background is not a parcel class,
                 so labels become 0..6).
             class_mapping (dict, optional): Dictionary to define a mapping between the
@@ -108,8 +102,9 @@ class PLANTEUR_Dataset_PixelSet(data.Dataset):
             drop_temp_s2 (float): probability of temporal dropout for Sentinel-2 time series (default 0.0),
             drop_temp_s1: probability of temporal dropout for Sentinel-1 time series (default 0.0),
         """
-        unknown = [s for s in sats if s not in SATS]
-        assert not unknown, "Unknown satellite {} (available: {})".format(unknown, list(SATS))
+        sats = list(sats)
+        unknown = [s for s in sats if s not in PIXELSET_SATS]
+        assert not unknown, "Unknown satellite {} (available: {})".format(unknown, list(PIXELSET_SATS))
 
         super(PLANTEUR_Dataset_PixelSet, self).__init__()
         self.folder = folder
@@ -132,6 +127,7 @@ class PLANTEUR_Dataset_PixelSet(data.Dataset):
         self.meta_patch.index = self.meta_patch["ID_PATCH"].astype(int)
         self.meta_patch.sort_index(inplace=True)
         if folds is not None:
+            assert set(folds) <= set(FOLDS), "folds must be among {}".format(FOLDS)
             self.meta_patch = self.meta_patch[self.meta_patch["Fold"].isin(folds)]
 
         self.dates = {
@@ -225,7 +221,8 @@ class PLANTEUR_Dataset_PixelSet(data.Dataset):
                 m = mask
                 if a.shape[-2:] != mask.shape:  # LS: 64x64, 2x coarser grid
                     f = mask.shape[0] // a.shape[-2]
-                    m = mask.reshape(a.shape[-2], f, a.shape[-1], f).sum(axis=(1, 3)) >= 2
+                    cnt = mask.reshape(a.shape[-2], f, a.shape[-1], f).sum(axis=(1, 3))
+                    m = cnt >= 2 if (cnt >= 2).any() else cnt >= 1
                 data[s] = torch.from_numpy(a[:, :, m].astype(np.float32))  # T x C x N
             data = {
                 s: repeat_pixel_and_norm(a, self.n_pixel, norm=self.norm[s])
@@ -279,7 +276,9 @@ class PLANTEUR_Dataset_PixelSet(data.Dataset):
         label = self.labels[item]
         if self.class_mapping is not None:
             label = self.class_mapping[label]
-        data["label"] = torch.from_numpy(np.array(label - self.label_offset, dtype=int))
+        if self.label_offset is not None:
+            label -= self.label_offset
+        data["label"] = torch.from_numpy(np.array(label, dtype=int))
 
         # Retrieve geometric features
         if self.geom_features:
@@ -340,17 +339,6 @@ def sample_pixels(pixels, n_pixel):
     else:
         x = pixels
     return x
-
-
-def prepare_dates(date_dict, reference_date):
-    """Transforms date of observation to number of days since
-    the reference date.
-    """
-    return np.array([
-        (datetime.strptime(str(date_dict[k]), "%Y%m%d") - reference_date).days
-        for k in sorted(date_dict, key=int)
-    ])
-
 
 
 # Backward-compatible alias.

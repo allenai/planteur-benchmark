@@ -3,24 +3,20 @@
 Splits are keyed on a window's ~BLOCK_DEG (default 0.1 deg ~= 11 km) lon/lat
 block, so whole neighbourhoods stay in one split (no spatial leakage). Within
 each territory the blocks are ordered by a stable hash and assigned cumulatively
-to approach 70/15/15 by window count -- so every territory (hence every temperate/
-tropical class) is represented in all three splits. Blocks are indivisible, so the
+to approach 70/15/15 by window count -- so every territory (hence every crop class)
+is represented in all three splits. Blocks are indivisible, so the
 realised per-territory ratios deviate from the target (most for territories with few
 blocks, e.g. Mayotte).
 
 The result is written to each window's ``options["split"]`` (train/val/test) in
-metadata.json -- where rslearn's studio_ingest / eval builder read it -- and a
-sidecar ``splits_map.json`` mapping ``"<territory>|<bx>|<by>" -> split`` is
-saved next to the dataset root. Pass that map to ``--apply-map`` on a second
-dataset (e.g. the 12-monthly-mosaic twin built from the SAME cells) to copy the
-identical split onto every co-located window by lookup -- guaranteeing parity.
+metadata.json, and ``--write-map`` saves a ``"<territory>|<bx>|<by>" -> split`` map.
+Pass that map to ``--apply-map`` on a second dataset covering the same blocks (e.g. the
+monthly mosaics) to give every co-located window the identical split.
 
 Run:
-  # source dataset: compute + write splits, emit the map
-  python assign_splits.py --dataset data/national_ds --group rpg_2019_dec31 \
+  python assign_splits.py --dataset <RSLEARN_DATASET> --group rpg_2019_dec31 \
       --write-map splits_map.json
-  # twin dataset: apply the same map (identical splits by construction)
-  python assign_splits.py --dataset data/national_ds_monthly --group rpg_2019_dec31 \
+  python assign_splits.py --dataset <MONTHLY_RSLEARN_DATASET> --group rpg_2019_dec31 \
       --apply-map splits_map.json
 """
 
@@ -150,8 +146,7 @@ def main() -> None:
 
     if args.apply_map:
         split_map = json.loads(Path(args.apply_map).read_text())
-        # Any block absent from the map (should not happen for same-cell twins)
-        # falls back to a fresh per-block bucket so nothing is left unlabeled.
+        # Any block absent from the map falls back to a fresh per-block bucket so nothing is left unlabeled.
         missing = 0
         for mp in windows:
             lon, lat = _centroid_lonlat(json.loads(mp.read_text()))

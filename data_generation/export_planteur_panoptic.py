@@ -1,17 +1,18 @@
 """Add PASTIS INSTANCE_ANNOTATIONS (panoptic) to the raw PASTIS-format export.
 
 For each exported patch, rasterize the RPG parcels onto the patch grid to get
-per-pixel instance IDs, then compute the centerness HEATMAP and ZONES exactly
-like pastis-benchmark/code/centerness_ground_truth.py. Writes, under <out>:
+per-pixel instance IDs, keep only the parcels labelled with one of the 7 crop
+classes, then compute the centerness HEATMAP and ZONES exactly like
+pastis-benchmark/code/centerness_ground_truth.py. Writes, under <out>:
 
-  INSTANCE_ANNOTATIONS/INSTANCES_<id>.npy  (128,128) int32   -- per-pixel parcel/instance id (0=bg)
+  INSTANCE_ANNOTATIONS/INSTANCES_<id>.npy  (128,128) int32   -- per-pixel parcel/instance id (0=Background or void)
   INSTANCE_ANNOTATIONS/HEATMAP_<id>.npy    (128,128) float32 -- object centerness
   INSTANCE_ANNOTATIONS/ZONES_<id>.npy      (128,128) int32   -- pixel->nearest-center instance
 
 Uses the imagery pass's metadata.geojson (ID_PATCH == sorted-window index) so the
-patch ids line up with DATA_S2/ANNOTATIONS. Run AFTER export_pastis_raw.py:
-  python export_pastis_panoptic.py --src data/national_ds --group rpg_2019_dec31 \
-      --out <PLANTEUR_ROOT> --rpg data/rpg_drom
+patch ids line up with DATA_S2/ANNOTATIONS. Run AFTER export_planteur_raw.py:
+  python export_planteur_panoptic.py --src <RSLEARN_DATASET> --group rpg_2019_dec31 \
+      --out <PLANTEUR_ROOT> --rpg <RPG_DIR>
 """
 from __future__ import annotations
 import argparse, glob, json, os
@@ -62,8 +63,12 @@ def rasterize_parcels(window_meta, parcels_4326, sindex):
     )
 
 
+def crop_mask(semantic):
+    return (semantic >= 1) & (semantic <= 7)
+
+
 def compute_heatmap_zones(parcel_ids, semantic):
-    instance = parcel_ids * (semantic != 0)
+    instance = parcel_ids * crop_mask(semantic)
     paid = np.unique(instance)
     mapp = {int(pid): k for k, pid in enumerate(paid)}  # 0 (bg) -> code 0
     inst_codes = np.vectorize(lambda x: mapp[int(x)])(instance)
@@ -83,7 +88,7 @@ def compute_heatmap_zones(parcel_ids, semantic):
     heatmap = S.max(axis=0).astype(np.float32)
     zi = np.argmax(S, axis=0)
     zones = np.vectorize(lambda x: codes[x])(zi).astype(np.int32)
-    zones = zones * (semantic != 0)  # background stays 0
+    zones = zones * crop_mask(semantic)
     return heatmap, zones
 
 
@@ -92,7 +97,7 @@ def main():
     ap.add_argument("--src", required=True)
     ap.add_argument("--group", default="rpg_2019_dec31")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--rpg", default="data/rpg_drom")
+    ap.add_argument("--rpg", required=True, help="directory of RPG 2019 .gpkg files")
     args = ap.parse_args()
     ia = os.path.join(args.out, "INSTANCE_ANNOTATIONS")
     os.makedirs(ia, exist_ok=True)
@@ -115,7 +120,8 @@ def main():
         pids = rasterize_parcels(wmeta, P, sindex)
         semantic = np.load(os.path.join(args.out, "ANNOTATIONS", f"TARGET_{pid}.npy"))[0]
         heat, zones = compute_heatmap_zones(pids, semantic)
-        np.save(os.path.join(ia, f"INSTANCES_{pid}.npy"), pids.astype(np.int32))
+        instances = (pids * crop_mask(semantic)).astype(np.int32)
+        np.save(os.path.join(ia, f"INSTANCES_{pid}.npy"), instances)
         np.save(os.path.join(ia, f"HEATMAP_{pid}.npy"), heat)
         np.save(os.path.join(ia, f"ZONES_{pid}.npy"), zones)
         if (n + 1) % 100 == 0:

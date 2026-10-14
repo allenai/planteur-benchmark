@@ -1,6 +1,6 @@
-"""Export PASTIS2-DROM to the *exact* original-PASTIS file format from the DENSE
-rslearn dataset (national_ds: ~150 raw S2 + ~123 raw S1 acquisitions per patch),
-so existing PASTIS dataloaders (pastis-benchmark/code/dataloader.py) load it as-is.
+"""Export PLANTEUR to the *exact* original-PASTIS file format from the rslearn
+dataset holding every S2 and S1 acquisition per patch, so existing PASTIS dataloaders
+(pastis-benchmark/code/dataloader.py) load it as-is.
 
 Produces, under --out:
   DATA_S2/S2_<id>.npy          (T_s2, 10, 128, 128) uint16, chronological
@@ -9,9 +9,9 @@ Produces, under --out:
   metadata.geojson             ID_PATCH, dates-S2, dates-S1, Fold, geometry(real polygon)
   NORM_S2_patch.json, NORM_S1_patch.json
 
-Panoptic INSTANCE_ANNOTATIONS are added by a companion pass (export_pastis_panoptic.py).
+Panoptic INSTANCE_ANNOTATIONS are added by a companion pass (export_planteur_panoptic.py).
 
-Run: python export_pastis_raw.py --src data/national_ds --group rpg_2019_dec31 \
+Run: python export_planteur_raw.py --src <RSLEARN_DATASET> --group rpg_2019_dec31 \
         --out <PLANTEUR_ROOT> [--limit N]
 """
 from __future__ import annotations
@@ -23,7 +23,6 @@ import rasterio
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry import box
-import pyproj
 
 S2_BS = "B02_B03_B04_B05_B06_B07_B08_B8A_B11_B12"   # 10 bands, 128x128
 S1_BS = "vv_vh"
@@ -32,9 +31,9 @@ SRC_NODATA = {"sentinel2": 0, "sentinel1": -32768}
 # 26-class source label id -> the 8 trained classes. Every excluded crop (Corn,
 # Grapevine, Beet, Potatoes, Leguminous fodder, Soybeans, Vanilla, Ylang-ylang,
 # Coffee/Cacao, plus the temperate classes absent from the DROM) maps to VOID, which is
-# masked out of loss and metrics. Background(0) therefore stays a real land-cover class
-# instead of absorbing unmapped agriculture -- following the PASTIS convention that
-# background is land cover and void is invalid data.
+# masked out of loss and metrics, following the PASTIS convention that void is invalid
+# data. Background(0) keeps land outside the RPG and RPG parcels whose crop code has no
+# source class.
 KEEP = {0: 0, 1: 1, 12: 2, 16: 3, 19: 4, 20: 5, 21: 6, 23: 7}
 VOID = 255  # void / nodata sentinel (also the source raster's nodata value)
 FOLD_OF = {"train": 1, "val": 4, "test": 5}
@@ -53,7 +52,7 @@ def _acq_dates(window: str, layer: str) -> list[tuple[int, int]]:
         it = json.loads(grp[0]) if isinstance(grp[0], str) else grp[0]
         tr = it.get("geometry", {}).get("time_range")
         dt = datetime.fromisoformat(tr[0]) if tr else None
-        if dt is None:  # fall back to parsing the product name
+        if dt is None:
             continue
         out.append((gi, int(dt.strftime("%Y%m%d"))))
     return out
@@ -109,8 +108,7 @@ def read_target(window: str) -> np.ndarray:
     tif = glob.glob(os.path.join(window, "layers/label/*/geotiff.tif"))[0]
     with rasterio.open(tif) as ds:
         lab = ds.read(1)
-    # Anything not explicitly kept becomes VOID. KEEP maps source id 0 -> 0, so genuine
-    # (non-agricultural) background survives rather than being voided with the crops.
+    # Anything not explicitly kept becomes VOID; KEEP maps source id 0 -> 0.
     out = np.full(lab.shape, VOID, dtype=np.uint8)
     for k, v in KEEP.items():
         out[lab == k] = v
@@ -127,16 +125,15 @@ def patch_polygon(meta: dict):
 
 def merge(out):
     """Combine per-shard metadata + norm into final metadata.geojson + NORM_*.json."""
-    import glob as _g
     rows = []
-    for f in sorted(_g.glob(os.path.join(out, "_meta", "*.geojson"))):
+    for f in sorted(glob.glob(os.path.join(out, "_meta", "*.geojson"))):
         rows.append(gpd.read_file(f))
     gdf = pd.concat(rows, ignore_index=True)
     gdf = gpd.GeoDataFrame(gdf, crs=4326).sort_values("ID_PATCH").reset_index(drop=True)
     gdf.to_file(os.path.join(out, "metadata.geojson"), driver="GeoJSON")
     for nm, bands in [("S2", 10), ("S1", 2)]:
         S = SQ = None; N = 0
-        for f in sorted(_g.glob(os.path.join(out, "_norm", f"*_{nm}.json"))):
+        for f in sorted(glob.glob(os.path.join(out, "_norm", f"*_{nm}.json"))):
             d = json.load(open(f))
             if not np.any(d["n"]):
                 continue
@@ -162,7 +159,6 @@ def main():
     ap.add_argument("--group", default="rpg_2019_dec31")
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--norm-sample", type=int, default=150)
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--end", type=int, default=0)   # 0 == to end
     ap.add_argument("--merge", action="store_true")
